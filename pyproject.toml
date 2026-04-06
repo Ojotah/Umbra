@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "umbra"
+version = "0.1.0"
+description = "Umbra automation assistant (V1: reminders for Ubuntu)."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Umbra Contributors" }]
+license = { text = "MIT" }
+
+[project.scripts]
+umbra = "main:main"
+
+[tool.setuptools]
+py-modules = ["main", "daemon"]
+packages = ["commands", "core", "services", "storage", "config"]
+

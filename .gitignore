@@ -1,0 +1,26 @@
+## Python
+__pycache__/
+*.py[cod]
+*.pyd
+
+## Environment
+.env
+venv/
+env/
+.venv/
+
+## Packaging
+build/
+dist/
+*.egg-info/
+
+## IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+## Project-specific
+storage/tasks.json
+logs/
+*.log
+
