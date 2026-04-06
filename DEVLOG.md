@@ -69,3 +69,41 @@
 ### Outcome
 - Clean initial commit ready for collaboration or deployment
 
+## 2026-04-06 — Phase A — Stability upgrade
+
+- **Why the polling loop was refactored**:
+  - The daemon loop was reorganized into explicit steps (load → due → running → execute → done/failed → sleep) to reduce accidental complexity and improve correctness.
+  - Each cycle now accounts for time spent executing tasks to avoid CPU waste.
+- **Why task states were introduced**:
+  - Tasks now carry a `status`: `pending | running | done | failed`.
+  - The daemon sets `running` before execution and `done/failed` afterward so tasks do not execute twice.
+- **Why logging was added**:
+  - A small file logger writes to `logs/umbra.log` and records daemon lifecycle, task execution, failures, and storage errors.
+  - Logging is best-effort and never crashes the daemon.
+- **Why atomic storage writes matter**:
+  - JSON writes are atomic (temp file + replace) to avoid corrupting `tasks.json`.
+  - File locking is used to reduce races between CLI writers and the daemon.
+- **Crash safety**:
+  - Exceptions are caught per task and per cycle; the daemon continues running.
+  - On restart, tasks in `running` state are not re-executed, preventing duplicates.
+
+Execution lifecycle (diagram):
+
+CLI → parse → task(`pending`) → storage  
+Daemon → load → due(`pending`) → mark `running` → execute → mark `done/failed` → prune `done`
+
+## 2026-04-06 — Phase B — UX Polish
+
+- **Why CLI output was redesigned**:
+  - Added structured command surfaces (`help`, `add`, `list`, `status`, `logs`) so daily usage is predictable and easier to scan.
+  - Replaced terse single-line outputs with consistent, multi-line summaries for scheduling confirmation.
+- **Why human-readable time formatting matters**:
+  - Added `format_time()` and `format_relative_time()` so users see phrases like “in 2 minutes” instead of raw timestamps.
+  - List views now include both absolute and relative run times for faster decision-making.
+- **Why formatting/logic separation improves maintainability**:
+  - Moved presentation code into `utils/formatter.py` and kept command behavior in `commands/cli_tasks.py`.
+  - This keeps CLI UX changes isolated from storage and daemon logic.
+- **Why a structured help system was introduced**:
+  - Added `umbra help` with grouped sections (Core Commands, Task Management, System Commands).
+  - Command usage and short descriptions are aligned for readability.
+

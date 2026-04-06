@@ -19,6 +19,11 @@ class Settings:
     app_name: str = "Umbra"
     storage_dir: Path = Path(__file__).resolve().parent.parent / "storage"
     tasks_file: Path = Path(__file__).resolve().parent.parent / "storage" / "tasks.json"
+    logs_dir: Path = Path(__file__).resolve().parent.parent / "logs"
+    log_file: Path = Path(__file__).resolve().parent.parent / "logs" / "umbra.log"
+    data_dir: Path = Path(__file__).resolve().parent.parent / "data"
+    workflows_file: Path = Path(__file__).resolve().parent.parent / "data" / "workflows.json"
+    poll_interval_seconds: float = 1.0
 
 
 SETTINGS = Settings()

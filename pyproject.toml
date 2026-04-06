@@ -16,5 +16,5 @@ umbra = "main:main"
 
 [tool.setuptools]
 py-modules = ["main", "daemon"]
-packages = ["commands", "core", "services", "storage", "config"]
+packages = ["commands", "core", "core.workflows", "services", "storage", "config"]
 

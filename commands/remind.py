@@ -48,5 +48,6 @@ def build_reminder_task(req: ReminderRequest) -> Task:
         "message": req.message.strip(),
         "run_at": now + float(req.delay_seconds),
         "created_at": now,
+        "status": "pending",
     }
 
