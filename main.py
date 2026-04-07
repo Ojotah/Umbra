@@ -61,6 +61,21 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p_chain.add_argument("chain_command", nargs="?", help="Command chain to execute.")
     p_chain.add_argument("--dry-run", action="store_true", help="Show execution plan without executing.")
     
+    sub.add_parser("doctor", help="Run system health checks.")
+    
+    # Shell integration commands
+    p_shell = sub.add_parser("shell", help="Shell integration commands.")
+    p_shell_sub = p_shell.add_subparsers(dest="shell_action")
+    p_shell_sub.add_parser("setup", help="Set up shell integration.")
+    p_shell_sub.add_parser("remove", help="Remove shell integration.")
+    
+    # Service management commands
+    p_service = sub.add_parser("service", help="Systemd service commands.")
+    p_service_sub = p_service.add_subparsers(dest="service_action")
+    p_service_sub.add_parser("install", help="Install systemd user service.")
+    p_service_sub.add_parser("uninstall", help="Uninstall systemd user service.")
+    p_service_sub.add_parser("status", help="Check systemd service status.")
+    
     # Daemon control commands
     p_daemon = sub.add_parser("daemon", help="Daemon control commands.")
     p_daemon_sub = p_daemon.add_subparsers(dest="daemon_action")
@@ -85,7 +100,7 @@ def main(argv: list[str] | None = None) -> int:
         argv = sys.argv[1:]
     
     # Check if this looks like natural language format
-    if len(argv) > 0 and not argv[0] in ['help', 'add', 'list', 'status', 'logs', 'show', 'retry', 'chain', 'daemon', '--help', '-h', '--list-commands']:
+    if len(argv) > 0 and not argv[0] in ['help', 'add', 'list', 'status', 'logs', 'show', 'retry', 'chain', 'daemon', 'doctor', 'shell', 'service', '--help', '-h', '--list-commands']:
         # Try to parse as natural language
         natural_text = " ".join(argv)
         try:
@@ -239,6 +254,57 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         
         print("Usage: umbra daemon {status|start|stop}", file=sys.stderr)
+        return 2
+
+    if args.command == "doctor":
+        from commands.doctor import run_doctor_checks
+        run_doctor_checks()
+        return 0
+
+    if args.command == "shell":
+        from umbra.shell.integration import setup_shell_integration, remove_shell_integration
+        shell_action = getattr(args, 'shell_action', '')
+        
+        if shell_action == "setup":
+            result = setup_shell_integration()
+            print(result)
+            return 0
+        
+        if shell_action == "remove":
+            result = remove_shell_integration()
+            print(result)
+            return 0
+        
+        print("Usage: umbra shell {setup|remove}", file=sys.stderr)
+        return 2
+
+    if args.command == "service":
+        from system.service import install_service, uninstall_service, get_service_status
+        service_action = getattr(args, 'service_action', '')
+        
+        if service_action == "install":
+            result = install_service()
+            print(result)
+            return 0
+        
+        if service_action == "uninstall":
+            result = uninstall_service()
+            print(result)
+            return 0
+        
+        if service_action == "status":
+            status = get_service_status()
+            if status == "active":
+                print("Systemd service is active")
+            elif status == "inactive":
+                print("Systemd service is inactive")
+            elif status == "failed":
+                print("Systemd service has failed")
+            else:
+                print("Systemd service status unknown")
+            return 0
+        
+        print("Usage: umbra service {install|uninstall|status}", file=sys.stderr)
         return 2
 
     # Backward-compatible natural language path
