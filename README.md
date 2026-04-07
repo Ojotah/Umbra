@@ -23,6 +23,7 @@ Umbra is a Python-based automation assistant for Ubuntu with a daemon-first arch
 - **Dry Run Mode** - `umbra chain "command" --dry-run` for execution planning
 - **Robust Parser** - Handles filler words and complex separators
 - **Daemon Control** - Start, stop, and check daemon status
+- **Dynamic App Execution** - Open ANY installed application without manual configuration
 
 ## 🏗️ Architecture
 
@@ -31,12 +32,13 @@ Umbra is a Python-based automation assistant for Ubuntu with a daemon-first arch
 - **Daemon** (`python3 daemon.py`) executes due tasks in background
 - **Storage** (`storage/tasks.json`) persists task state safely
 - **Chain Engine** (`core/chains/`) parses and executes action sequences
-- **System Executor** (`services/system_executor.py`) executes whitelisted actions safely
+- **System Executor** (`services/system_executor.py`) executes whitelisted and dynamic actions safely
+- **Action Manager** (`services/action_manager.py`) handles dynamic app detection and security
 
 ### Task Types
 - **Reminder tasks** - Desktop notifications at scheduled time
 - **System tasks** - Single whitelisted system actions
-- **Chain tasks** - Multi-step action sequences with natural language parsing
+- **Chain tasks** - Multi-step action sequences with natural language parsing and dynamic app support
 
 ### Task Model
 ```json
@@ -175,13 +177,26 @@ Creates a chain task for executing multiple system actions sequentially.
 - `,` - sequential execution
 
 **Natural language parsing**
-The chain engine converts natural language to whitelisted actions:
+The chain engine converts natural language to actions with both static and dynamic support:
+
+**Static Actions (Traditional)**
 - `"open vscode"` → `"open_vscode"`
 - `"open chrome"` → `"open_chrome"`
 - `"open vim"` → `"open_vim"`
 - `"volume up"` → `"volume_up"`
 - `"volume down"` → `"volume_down"`
 - `"lock screen"` → `"lock_screen"`
+
+**Dynamic Application Support (NEW)**
+- `"open firefox"` → `"dynamic_app:firefox"`
+- `"launch spotify"` → `"dynamic_app:spotify"`
+- `"start calculator"` → `"dynamic_app:calculator"`
+- `"open terminal"` → `"dynamic_app:terminal"`
+
+**Supported Dynamic Patterns**
+- `open <app_name>` - Opens any installed application
+- `launch <app_name>` - Alternative syntax for opening apps
+- `start <app_name>` - Another alternative for opening apps
 
 **Filler words ignored**
 - `please`, `maybe`
@@ -195,6 +210,11 @@ umbra chain "open vscode then open chrome"
 umbra chain "please open vscode and maybe open vim"
 umbra chain "open vscode, open chrome and volume_up"
 umbra chain "open vscode and then open chrome"
+
+# Dynamic app examples (NEW)
+umbra chain "open firefox then launch spotify"
+umbra chain "start calculator, open terminal, open chrome"
+umbra chain "open firefox and volume_up"
 ```
 
 #### `umbra chain "command" --dry-run`
@@ -413,10 +433,18 @@ The chain system replaces static workflows with dynamic natural language parsing
 4. **Error handling**: Per-step isolation with detailed reporting
 
 ### Security Model
-- Only whitelisted actions can execute
-- No arbitrary command execution
-- All actions go through same system executor
-- Chain failures are contained and reported
+- **Static Actions**: Only pre-approved system commands can execute
+- **Dynamic Apps**: Sanitized app names with multiple execution methods
+- **No Shell Execution**: All commands use list-based subprocess (no shell=True)
+- **Input Sanitization**: Blocks dangerous characters (`; & | ` $ ( ) < > " '` )
+- **Length Limits**: Maximum 50 characters for app names
+- **Fallback Methods**: Tries `xdg-open`, `gtk-launch`, and direct execution
+
+### Configuration
+- **JSON-based**: `config/actions.json` for easy customization  
+- **Runtime Loading**: Changes apply without daemon restart
+- **Desktop Scanning**: Auto-discovers installed applications
+- **Backward Compatible**: All existing workflows preserved
 
 ### Storage Safety
 - Atomic file operations prevent corruption
@@ -457,6 +485,45 @@ grep "ERROR" logs/umbra.log
 # Filter for specific task
 grep "abc12345" logs/umbra.log
 ```
+
+## ⚙️ Configuration
+
+### Actions Configuration
+Umbra uses `config/actions.json` for dynamic action management:
+
+```json
+{
+  "static_actions": {
+    "volume_up": ["amixer", "sset", "Master", "10%+"],
+    "lock_screen": ["loginctl", "lock-session"]
+  },
+  "natural_language_mappings": {
+    "volume up": "volume_up",
+    "lock screen": "lock_screen"
+  },
+  "dynamic_app_patterns": ["open", "launch", "start"],
+  "security": {
+    "blocked_chars": [";", "&", "|", "`", "$", "(", ")", "<", ">", "\"", "'"],
+    "max_app_name_length": 50
+  },
+  "desktop_scan": {
+    "enabled": true,
+    "paths": ["/usr/share/applications", "~/.local/share/applications"]
+  }
+}
+```
+
+### Customizing Actions
+1. **Add Static Actions**: Edit `static_actions` object
+2. **Add Natural Language**: Update `natural_language_mappings` 
+3. **Modify Security**: Adjust `blocked_chars` and limits
+4. **Disable Scanning**: Set `desktop_scan.enabled: false`
+
+### Dynamic App Discovery
+Automatically scans desktop application directories for installed apps. Discovered apps become available as:
+- `open <app_name>` 
+- `launch <app_name>`
+- `start <app_name>`
 
 ---
 

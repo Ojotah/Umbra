@@ -23,4 +23,9 @@ dist/
 storage/tasks.json
 logs/
 *.log
+config/actions.json
+
+## Configuration backups
+config/actions.json.backup
+config/actions.json.*
 

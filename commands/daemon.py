@@ -2,6 +2,7 @@
 Daemon control commands.
 
 Provides status, start, and stop commands for Umbra daemon management.
+Uses PID file for reliable daemon tracking.
 """
 
 from __future__ import annotations
@@ -14,20 +15,31 @@ import time
 from pathlib import Path
 
 
+PID_PATH = Path.home() / ".local" / "share" / "umbra" / "daemon.pid"
+
+
 def get_daemon_pid() -> int | None:
-    """Get the PID of running Umbra daemon."""
+    """Get the PID of running Umbra daemon from PID file."""
     try:
-        # Look for python daemon.py process
-        result = subprocess.run(
-            ["pgrep", "-f", "python.*daemon.py"],
-            capture_output=True,
-            text=True
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            return int(result.stdout.strip().split()[0])
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        pass
-    return None
+        if not PID_PATH.exists():
+            return None
+        
+        pid_str = PID_PATH.read_text().strip()
+        if not pid_str:
+            return None
+        
+        pid = int(pid_str)
+        
+        # Check if process is actually running
+        try:
+            os.kill(pid, 0)  # Send signal 0 to check if process exists
+            return pid
+        except ProcessLookupError:
+            # Process not running, clean up stale PID file
+            PID_PATH.unlink(missing_ok=True)
+            return None
+    except (ValueError, OSError):
+        return None
 
 
 def is_daemon_running() -> bool:
@@ -38,7 +50,8 @@ def is_daemon_running() -> bool:
 def start_daemon() -> str:
     """Start the Umbra daemon in background."""
     if is_daemon_running():
-        return "Daemon is already running"
+        pid = get_daemon_pid()
+        return f"Daemon is already running (PID: {pid})"
     
     try:
         # Start daemon in background with proper Python path
@@ -56,7 +69,8 @@ def start_daemon() -> str:
         time.sleep(1)  # Give it time to start
         
         if is_daemon_running():
-            return "Daemon started successfully"
+            pid = get_daemon_pid()
+            return f"Daemon started successfully (PID: {pid})"
         else:
             return "Failed to start daemon"
     except Exception as e:

@@ -17,6 +17,7 @@ from commands.cli_tasks import (
 )
 from commands.cli_tasks import list_tasks as list_tasks_cmd
 from commands.daemon import get_daemon_pid, is_daemon_running, start_daemon, stop_daemon
+from umbra.api import api
 from config.settings import SETTINGS
 from core.parser import ParseError, parse
 from services.formatter import (
@@ -209,22 +210,33 @@ def main(argv: list[str] | None = None) -> int:
         daemon_action = getattr(args, 'daemon_action', '')
         
         if daemon_action == "status":
-            if is_daemon_running():
-                pid = get_daemon_pid()
+            status = api.daemon_status()
+            if status["running"]:
+                pid = status["pid"]
                 print(f"Daemon is running (PID: {pid})")
             else:
                 print("Daemon is not running")
             return 0
         
         if daemon_action == "start":
-            result = start_daemon()
-            print(result)
-            return 0 if "successfully" in result.lower() else 1
+            try:
+                api.start_daemon()
+                status = api.daemon_status()
+                pid = status["pid"]
+                print(f"Daemon started successfully (PID: {pid})")
+            except RuntimeError as e:
+                print(str(e), file=sys.stderr)
+                return 1
+            return 0
         
         if daemon_action == "stop":
-            result = stop_daemon()
-            print(result)
-            return 0 if "successfully" in result.lower() else 1
+            try:
+                api.stop_daemon()
+                print("Daemon stopped successfully")
+            except RuntimeError as e:
+                print(str(e), file=sys.stderr)
+                return 1
+            return 0
         
         print("Usage: umbra daemon {status|start|stop}", file=sys.stderr)
         return 2

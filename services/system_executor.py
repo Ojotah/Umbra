@@ -1,91 +1,53 @@
 """
 System executor.
 
-Executes only whitelisted actions mapped to OS commands.
+Executes actions through the dynamic action manager.
+Provides backward compatibility with existing code.
 """
 
 from __future__ import annotations
 
-import subprocess
-import shutil
+from pathlib import Path
 from typing import Dict, List
+
+from .action_manager import ActionManager
 
 SystemResult = Dict[str, object]
 
-# Whitelisted actions only.
-WHITELIST: Dict[str, List[str]] = {
-    "open_vscode": ["code"],
-    "open_chrome": ["google-chrome"],
-    "open_vim": ["vim"],
-    "volume_up": ["amixer", "sset", "Master", "10%+"],
-    "volume_down": ["amixer", "sset", "Master", "10%-"],
-    "lock_screen": ["loginctl", "lock-session"],
-}
+# Global action manager instance
+_action_manager: ActionManager | None = None
+
+
+def get_action_manager() -> ActionManager:
+    """Get or create the global action manager instance."""
+    global _action_manager
+    if _action_manager is None:
+        _action_manager = ActionManager()
+    return _action_manager
+
+
+def get_whitelist() -> Dict[str, List[str]]:
+    """Get whitelist for backward compatibility."""
+    return get_action_manager().static_actions
 
 
 def normalize_action(text: str) -> str:
     """
     Normalize natural language text to action name.
     
-    Simple implementation that maps common phrases to whitelisted actions.
-    Only returns actions that are in the whitelist for security.
+    Delegates to ActionManager for both static and dynamic actions.
     """
-    if not text or not text.strip():
-        return ""
-    
-    # Convert to lowercase and strip
-    normalized = text.strip().lower()
-    
-    # Simple mappings
-    mappings = {
-        "open vscode": "open_vscode",
-        "vscode": "open_vscode",
-        "code": "open_vscode",
-        "open chrome": "open_chrome", 
-        "chrome": "open_chrome",
-        "google chrome": "open_chrome",
-        "open vim": "open_vim",
-        "vim": "open_vim",
-        "volume up": "volume_up",
-        "increase volume": "volume_up",
-        "volume_up": "volume_up",  # Add underscore version
-        "volume down": "volume_down",
-        "decrease volume": "volume_down",
-        "volume_down": "volume_down",  # Add underscore version
-        "lock screen": "lock_screen",
-        "lock": "lock_screen",
-    }
-    
-    mapped_action = mappings.get(normalized, "")
-    # Only return if the mapped action is in our whitelist
-    return mapped_action if mapped_action in WHITELIST else ""
+    return get_action_manager().normalize_action(text)
 
 
 def execute_action(action: str) -> SystemResult:
     """
-    Execute a whitelisted system action.
-
-    Uses subprocess.run with 10-second timeout for daemon safety.
-    Pre-validates command existence using shutil.which.
+    Execute a system action.
+    
+    Delegates to ActionManager for both static and dynamic actions.
     """
-    cmd = WHITELIST.get(action)
-    if cmd is None:
-        return {"success": False, "action": action, "error": "Action not whitelisted"}
-    
-    # Pre-validate command exists
-    if not shutil.which(cmd[0]):
-        return {"success": False, "action": action, "error": f"Command not found: {cmd[0]}"}
-    
-    try:
-        result = subprocess.run(cmd, timeout=10, capture_output=True, text=True)
-        return {
-            "success": True, 
-            "action": action, 
-            "return_code": result.returncode,
-            "stdout": result.stdout,
-            "stderr": result.stderr
-        }
-    except subprocess.TimeoutExpired:
-        return {"success": False, "action": action, "error": "timeout"}
-    except OSError as e:
-        return {"success": False, "action": action, "error": str(e)}
+    return get_action_manager().execute_action(action)
+
+
+# Backward compatibility aliases
+WHITELIST = get_whitelist()
