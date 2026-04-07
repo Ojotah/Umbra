@@ -17,8 +17,8 @@ WHITELIST: Dict[str, List[str]] = {
     "open_vscode": ["code"],
     "open_chrome": ["google-chrome"],
     "open_vim": ["vim"],
-    "volume_up": ["amixer", "-D", "pulse", "sset", "Master", "5%+"],
-    "volume_down": ["amixer", "-D", "pulse", "sset", "Master", "5%-"],
+    "volume_up": ["amixer", "sset", "Master", "10%+"],
+    "volume_down": ["amixer", "sset", "Master", "10%-"],
     "lock_screen": ["loginctl", "lock-session"],
 }
 
@@ -48,8 +48,10 @@ def normalize_action(text: str) -> str:
         "vim": "open_vim",
         "volume up": "volume_up",
         "increase volume": "volume_up",
+        "volume_up": "volume_up",  # Add underscore version
         "volume down": "volume_down",
         "decrease volume": "volume_down",
+        "volume_down": "volume_down",  # Add underscore version
         "lock screen": "lock_screen",
         "lock": "lock_screen",
     }
@@ -76,7 +78,13 @@ def execute_action(action: str) -> SystemResult:
     
     try:
         result = subprocess.run(cmd, timeout=10, capture_output=True, text=True)
-        return {"success": True, "action": action, "return_code": result.returncode}
+        return {
+            "success": True, 
+            "action": action, 
+            "return_code": result.returncode,
+            "stdout": result.stdout,
+            "stderr": result.stderr
+        }
     except subprocess.TimeoutExpired:
         return {"success": False, "action": action, "error": "timeout"}
     except OSError as e:

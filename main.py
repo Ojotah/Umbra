@@ -37,7 +37,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         description="Umbra CLI (daemon-based task scheduler).",
         add_help=True,
     )
-    sub = p.add_subparsers(dest="command")
+    sub = p.add_subparsers(dest="command", required=False)
 
     sub.add_parser("help", help="Show structured Umbra help.")
 
@@ -69,6 +69,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
     # Backward-compatible natural language input:
     # umbra "remind me in 10 seconds test"
+    # Handle this as positional arguments that don't match subcommands
     p.add_argument("text", nargs="?", help=argparse.SUPPRESS)
     p.add_argument("extra", nargs="*", help=argparse.SUPPRESS)
     p.add_argument("--list-commands", action="store_true", help=argparse.SUPPRESS)
@@ -77,6 +78,23 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     """Run Umbra CLI and return process exit code."""
+    
+    # Handle natural language format before argparse
+    if argv is None:
+        argv = sys.argv[1:]
+    
+    # Check if this looks like natural language format
+    if len(argv) > 0 and not argv[0] in ['help', 'add', 'list', 'status', 'logs', 'show', 'retry', 'chain', 'daemon', '--help', '-h', '--list-commands']:
+        # Try to parse as natural language
+        natural_text = " ".join(argv)
+        try:
+            from core.parser import parse, ParseError
+            cmd = parse(natural_text)
+            if cmd.intent == "remind" and cmd.delay_seconds is not None:
+                return _handle_natural_text(natural_text)
+        except (ParseError, ImportError):
+            pass  # Fall through to normal parsing
+    
     args = build_arg_parser().parse_args(argv)
 
     if args.list_commands or args.command == "help":

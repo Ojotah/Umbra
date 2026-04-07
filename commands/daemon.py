@@ -41,12 +41,17 @@ def start_daemon() -> str:
         return "Daemon is already running"
     
     try:
-        # Start daemon in background
+        # Start daemon in background with proper Python path
+        # Use the directory containing this file as the daemon working directory
+        daemon_dir = Path(__file__).resolve().parent.parent
+        env = os.environ.copy()
+        env['PYTHONPATH'] = str(daemon_dir)
         subprocess.Popen(
             [sys.executable, "daemon.py"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            cwd=Path.cwd()
+            cwd=daemon_dir,
+            env=env
         )
         time.sleep(1)  # Give it time to start
         
