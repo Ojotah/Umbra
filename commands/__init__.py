@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, Sequence
 
-from commands import message, remind, system, workflow
+from commands import message, remind, system
 
 
 @dataclass(frozen=True)
@@ -28,7 +28,6 @@ REGISTRY: dict[str, CommandInfo] = {
     remind.NAME: CommandInfo(remind.NAME, remind.DESCRIPTION, tuple(remind.EXAMPLES)),
     message.NAME: CommandInfo(message.NAME, message.DESCRIPTION, tuple(message.EXAMPLES)),
     system.NAME: CommandInfo(system.NAME, system.DESCRIPTION, tuple(system.EXAMPLES)),
-    workflow.NAME: CommandInfo(workflow.NAME, workflow.DESCRIPTION, tuple(workflow.EXAMPLES)),
 }
 
 

@@ -6,14 +6,17 @@ import argparse
 import sys
 
 from commands.cli_tasks import (
-    list_workflow_names,
+    dry_run_chain,
+    get_task_by_id,
     parse_duration_to_seconds,
     read_logs,
+    retry_task,
     schedule_task,
-    schedule_workflow_task,
+    schedule_chain_task,
     status_counts,
 )
 from commands.cli_tasks import list_tasks as list_tasks_cmd
+from commands.daemon import get_daemon_pid, is_daemon_running, start_daemon, stop_daemon
 from config.settings import SETTINGS
 from core.parser import ParseError, parse
 from services.formatter import (
@@ -21,8 +24,8 @@ from services.formatter import (
     format_logs,
     format_status_summary,
     format_task_scheduled,
+    format_task_show,
     format_task_table,
-    format_workflow_list,
 )
 from storage.task_store import StorageError
 
@@ -46,8 +49,23 @@ def build_arg_parser() -> argparse.ArgumentParser:
     sub.add_parser("list", help="List all tasks.")
     sub.add_parser("status", help="Show task status summary.")
     sub.add_parser("logs", help="Show newest daemon logs.")
-    p_workflow = sub.add_parser("workflow", help="Workflow commands.")
-    p_workflow.add_argument("target", nargs="?", default="list", help='Workflow name or "list".')
+    
+    p_show = sub.add_parser("show", help="Show detailed task information.")
+    p_show.add_argument("task_id", help="Task ID to inspect.")
+    
+    p_retry = sub.add_parser("retry", help="Retry a failed task.")
+    p_retry.add_argument("task_id", help="Task ID to retry.")
+    
+    p_chain = sub.add_parser("chain", help="Chain commands.")
+    p_chain.add_argument("chain_command", nargs="?", help="Command chain to execute.")
+    p_chain.add_argument("--dry-run", action="store_true", help="Show execution plan without executing.")
+    
+    # Daemon control commands
+    p_daemon = sub.add_parser("daemon", help="Daemon control commands.")
+    p_daemon_sub = p_daemon.add_subparsers(dest="daemon_action")
+    p_daemon_sub.add_parser("status", help="Check if daemon is running.")
+    p_daemon_sub.add_parser("start", help="Start the daemon.")
+    p_daemon_sub.add_parser("stop", help="Stop the daemon.")
 
     # Backward-compatible natural language input:
     # umbra "remind me in 10 seconds test"
@@ -112,19 +130,50 @@ def main(argv: list[str] | None = None) -> int:
         print(format_logs(lines))
         return 0
 
-    if args.command == "workflow":
-        target = str(args.target).strip()
-        if target.lower() == "list":
-            names = list_workflow_names(SETTINGS.workflows_file)
-            print(format_workflow_list(names))
+    if args.command == "show":
+        try:
+            task = get_task_by_id(SETTINGS.tasks_file, task_id=args.task_id)
+        except StorageError as e:
+            print(str(e), file=sys.stderr)
+            return 1
+        
+        if task is None:
+            print(f"Task not found: {args.task_id}", file=sys.stderr)
+            return 2
+        
+        print(format_task_show(task))
+        return 0
+
+    if args.command == "retry":
+        try:
+            task = retry_task(SETTINGS.tasks_file, task_id=args.task_id)
+        except (ValueError, StorageError) as e:
+            print(str(e), file=sys.stderr)
+            return 1
+        
+        print(
+            format_task_scheduled(
+                task_id=str(task["id"]),
+                run_at=float(task["run_at"]),
+                message=f"retry of {args.task_id}",
+            )
+        )
+        return 0
+
+    if args.command == "chain":
+        chain_cmd = getattr(args, 'chain_command', '') or ''
+        chain_cmd = chain_cmd.strip()
+        if not chain_cmd:
+            print("Usage: umbra chain \"open vscode then open chrome\"", file=sys.stderr)
+            return 2
+
+        # Check for dry run mode
+        if getattr(args, 'dry_run', False):
+            dry_run_chain(chain_cmd)
             return 0
 
         try:
-            available = set(list_workflow_names(SETTINGS.workflows_file))
-            if target not in available:
-                print(f"Unknown workflow: {target}", file=sys.stderr)
-                return 2
-            task = schedule_workflow_task(SETTINGS.tasks_file, workflow_name=target)
+            task = schedule_chain_task(SETTINGS.tasks_file, command=chain_cmd)
         except StorageError as e:
             print(str(e), file=sys.stderr)
             return 1
@@ -133,10 +182,34 @@ def main(argv: list[str] | None = None) -> int:
             format_task_scheduled(
                 task_id=str(task["id"]),
                 run_at=float(task["run_at"]),
-                message=f"workflow:{target}",
+                message=f"chain:{chain_cmd}",
             )
         )
         return 0
+
+    if args.command == "daemon":
+        daemon_action = getattr(args, 'daemon_action', '')
+        
+        if daemon_action == "status":
+            if is_daemon_running():
+                pid = get_daemon_pid()
+                print(f"Daemon is running (PID: {pid})")
+            else:
+                print("Daemon is not running")
+            return 0
+        
+        if daemon_action == "start":
+            result = start_daemon()
+            print(result)
+            return 0 if "successfully" in result.lower() else 1
+        
+        if daemon_action == "stop":
+            result = stop_daemon()
+            print(result)
+            return 0 if "successfully" in result.lower() else 1
+        
+        print("Usage: umbra daemon {status|start|stop}", file=sys.stderr)
+        return 2
 
     # Backward-compatible natural language path
     natural_text = _build_natural_text(args.text, args.extra)

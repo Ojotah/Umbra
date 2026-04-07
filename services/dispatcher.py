@@ -1,21 +1,22 @@
 """
 Task dispatcher.
 
-Routes task execution by type. Workflows are expanded by the workflow engine and
-system steps execute through the whitelisted system executor.
+Routes task execution by type. Chains are parsed and executed sequentially by the
+chain engine and system steps execute through the whitelisted system executor.
 """
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Dict
 
-from core.workflows.workflow_engine import run_workflow
+from core.chains.chain_engine import run_chain_with_persistence
 from services.notifier import notify
 from services.system_executor import execute_action
 from storage.task_store import Task
 
 
-def dispatch_task(task: Task) -> Dict[str, Any]:
+def dispatch_task(task: Task, task_file: Path | None = None) -> Dict[str, Any]:
     """Dispatch a task and return structured execution metadata."""
     task_type = str(task.get("type"))
 
@@ -30,13 +31,22 @@ def dispatch_task(task: Task) -> Dict[str, Any]:
             return {"success": False, "type": "system", "error": "Missing action"}
         return dispatch_system_action(action)
 
-    if task_type == "workflow":
-        action = str(task.get("action", "")).strip()
-        if not action:
-            return {"success": False, "type": "workflow", "error": "Missing action"}
-        summary = run_workflow(action)
-        ok = int(summary.get("failed", 0)) == 0
-        return {"success": ok, "type": "workflow", "summary": summary}
+    if task_type == "chain":
+        task_id = str(task.get("id", ""))
+        command = str(task.get("action", "")).strip()
+        if not command:
+            return {"success": False, "type": "chain", "error": "Missing command"}
+        
+        # Use persistent execution if task_file is provided
+        if task_file:
+            summary = run_chain_with_persistence(task_file, task_id)
+        else:
+            # Fallback to non-persistent execution
+            from core.chains.chain_engine import run_chain
+            summary = run_chain(command)
+        
+        ok = bool(summary.get("success", False))
+        return {"success": ok, "type": "chain", "summary": summary}
 
     return {"success": False, "type": task_type, "error": f"Unsupported task type: {task_type}"}
 

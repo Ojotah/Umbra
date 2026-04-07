@@ -116,6 +116,56 @@ def format_logs(lines: Iterable[str]) -> str:
     return "\n".join(out) if out else "No logs available."
 
 
+def format_task_show(task: dict) -> str:
+    """Format detailed task information for the show command."""
+    task_id = str(task.get("id", ""))
+    task_type = str(task.get("type", ""))
+    status = str(task.get("status", ""))
+    run_at = float(task.get("run_at", 0))
+    message = str(task.get("message", ""))
+    
+    lines = [
+        f"Task: {short_id(task_id)}",
+        f"Type: {task_type}",
+        f"Status: {status}",
+        f"Run at: {format_time(run_at)} ({format_relative_time(run_at)})",
+        f"Message: {message}",
+    ]
+    
+    # Show steps if it's a chain task with steps
+    if task_type == "chain" and "steps" in task:
+        lines.append("")
+        lines.append("Steps:")
+        steps = task.get("steps", [])
+        for i, step in enumerate(steps, 1):
+            action = str(step.get("action", ""))
+            step_status = str(step.get("status", ""))
+            error = step.get("error")
+            
+            # Status symbols
+            if step_status == "done":
+                symbol = "✅"
+            elif step_status == "failed":
+                symbol = "❌"
+            elif step_status == "running":
+                symbol = "⏳"
+            else:
+                symbol = "⏸️"
+            
+            step_line = f"{i}. {action.ljust(20)} {symbol}"
+            if error:
+                step_line += f" ({error})"
+            lines.append(step_line)
+    
+    # Show error if task failed
+    if status == "failed" and "error" in task:
+        lines.append("")
+        lines.append("Error:")
+        lines.append(str(task.get("error", "")))
+    
+    return "\n".join(lines)
+
+
 def format_help_sections() -> str:
     sections = [
         (
@@ -123,8 +173,7 @@ def format_help_sections() -> str:
             [
                 ("umbra help", "Show this help"),
                 ("umbra add \"message\" in 10s", "Schedule a reminder task"),
-                ("umbra workflow list", "List available workflows"),
-                ("umbra workflow morning", "Schedule workflow task"),
+                ("umbra chain \"open vscode then open chrome\"", "Execute a command chain"),
             ],
         ),
         (
@@ -132,12 +181,17 @@ def format_help_sections() -> str:
             [
                 ("umbra list", "List all tasks"),
                 ("umbra status", "Show task status summary"),
+                ("umbra show <task_id>", "Show detailed task information"),
+                ("umbra retry <task_id>", "Retry a failed task"),
             ],
         ),
         (
             "System Commands",
             [
                 ("umbra logs", "Show latest daemon logs (newest first)"),
+                ("umbra daemon status", "Check if daemon is running"),
+                ("umbra daemon start", "Start the daemon"),
+                ("umbra daemon stop", "Stop the daemon"),
             ],
         ),
     ]
@@ -150,12 +204,3 @@ def format_help_sections() -> str:
             lines.append(f"  {usage.ljust(usage_width)}  {desc}")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
-
-
-def format_workflow_list(names: Sequence[str]) -> str:
-    if not names:
-        return "No workflows available."
-    lines = ["Available workflows:"]
-    lines.extend(f"- {name}" for name in names)
-    return "\n".join(lines)
-

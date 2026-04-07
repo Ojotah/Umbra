@@ -1,19 +1,64 @@
-# Umbra
+# Umbra v2 - Production-Ready Local Automation
 
-Umbra is a Python-based automation assistant for Ubuntu with a daemon-first architecture.
+Umbra is a Python-based automation assistant for Ubuntu with a daemon-first architecture. It provides reliable task scheduling, chain execution, and comprehensive observability.
 
-Core idea:
-- **CLI** (`umbra ...`) creates or inspects tasks
-- **Daemon** (`python3 daemon.py`) executes due tasks in the background
+## 🚀 What's New in v2
+
+### Enhanced Observability
+- **Task Inspection** - `umbra show <task_id>` for detailed task information
+- **Structured Logging** - JSON-formatted logs for better debugging and monitoring
+- **Step-by-Step Tracking** - Individual action status with progress indicators
+
+### Improved Reliability
+- **Persistent Chain Execution** - Step state survives daemon crashes
+- **Retry Functionality** - `umbra retry <task_id>` for failed tasks
+- **Atomic Storage Operations** - Prevents data corruption
+
+### Better Execution Safety
+- **Command Pre-Validation** - Checks if commands exist before execution
+- **Execution Timeout** - 10-second timeout prevents hanging processes
+- **Enhanced Error Handling** - Graceful failure handling without daemon crashes
+
+### Enhanced Debuggability
+- **Dry Run Mode** - `umbra chain "command" --dry-run` for execution planning
+- **Robust Parser** - Handles filler words and complex separators
+- **Daemon Control** - Start, stop, and check daemon status
+
+## 🏗️ Architecture
+
+### Core Components
+- **CLI** (`umbra ...`) creates, inspects, and manages tasks
+- **Daemon** (`python3 daemon.py`) executes due tasks in background
 - **Storage** (`storage/tasks.json`) persists task state safely
+- **Chain Engine** (`core/chains/`) parses and executes action sequences
+- **System Executor** (`services/system_executor.py`) executes whitelisted actions safely
 
-Umbra currently supports:
-- Reminder tasks
-- Workflow tasks (multi-step system actions)
-- Task visibility commands (`list`, `status`, `logs`)
-- Safe task lifecycle (`pending`, `running`, `done`, `failed`)
+### Task Types
+- **Reminder tasks** - Desktop notifications at scheduled time
+- **System tasks** - Single whitelisted system actions
+- **Chain tasks** - Multi-step action sequences with natural language parsing
 
-## Install and run
+### Task Model
+```json
+{
+  "id": "uuid",
+  "type": "remind | system | chain",
+  "status": "pending | running | done | failed",
+  "run_at": 1712345678.0,
+  "created_at": 1712345600.0,
+  "message": "task description",
+  "action": "command or action",
+  "steps": [                    // Chain tasks only
+    {
+      "action": "open_vscode",
+      "status": "pending | running | done | failed",
+      "error": null
+    }
+  ]
+}
+```
+
+## 📦 Installation and Setup
 
 ### 1) Install CLI (editable mode)
 
@@ -23,66 +68,16 @@ From the project root:
 pip install -e .
 ```
 
-### 2) Start the daemon
-
-```bash
-python3 daemon.py
-```
-
-Keep this running in a terminal.
-
 ### 3) Use CLI in another terminal
-
 ```bash
 umbra help
 ```
 
-## Architecture and flow
+## 🎯 Commands (Complete Guide)
 
-### CLI flow
-1. Parse command input
-2. Build task payload
-3. Save task to `storage/tasks.json`
-4. Exit immediately
+### Task Management
 
-### Daemon flow
-1. Load tasks from storage
-2. Select due `pending` tasks
-3. Mark task `running`
-4. Dispatch task by type (`remind`, `system`, `workflow`)
-5. Mark task `done` or `failed`
-6. Continue loop safely
-
-## Task model
-
-Each task has structured state:
-
-```json
-{
-  "id": "uuid",
-  "type": "remind | system | workflow",
-  "run_at": 1712345678.0,
-  "status": "pending | running | done | failed",
-  "created_at": 1712345600.0
-}
-```
-
-`remind` tasks include `message`; `system` and `workflow` tasks use `action`.
-
-## Commands (full guide)
-
-### `umbra help`
-**What it does**  
-Shows grouped command help with usage examples.
-
-**Usage**
-```bash
-umbra help
-```
-
----
-
-### `umbra add "message" in <duration>`
+#### `umbra add "message" in <duration>`
 **What it does**  
 Creates a reminder task for daemon execution.
 
@@ -91,23 +86,52 @@ Creates a reminder task for daemon execution.
 - `5m`, `2min`, `10 minutes`
 - `1h`, `2hr`, `3 hours`
 
-**Usage**
+**Usage examples**
 ```bash
 umbra add "drink water" in 10m
 umbra add "stand up" in 45s
+umbra add "meeting reminder" in 1h
 ```
 
-**Result**
-- Task is stored with status `pending`
-- Daemon executes at due time
-- CLI prints:
-  - short task ID
-  - relative run time
-  - message
+#### `umbra show <task_id>`
+**What it does**  
+Shows detailed task information with step-by-step progress.
 
----
+**Display information**
+- Task ID, type, status
+- Run time and message
+- Step details (for chain tasks)
+- Error information (for failed tasks)
 
-### `umbra list`
+**Usage examples**
+```bash
+umbra show abc12345
+umbra show 6a76af08-5674-42ff-a67f-da2fe6daaaaa
+```
+
+**Status symbols**
+- ✅ Step completed successfully
+- ❌ Step failed with error
+- ⏳ Step currently running
+- ⏸️ Step pending
+
+#### `umbra retry <task_id>`
+**What it does**  
+Clones a failed task with a new ID and resets all steps to pending.
+
+**Behavior**
+- Creates new task with original configuration
+- Resets all chain steps to `pending` status
+- Schedules immediate execution (1-second delay)
+- Original task remains in logs for reference
+
+**Usage examples**
+```bash
+umbra retry abc12345
+umbra retry 6a76af08-5674-42ff-a67f-da2fe6daaaaa
+```
+
+#### `umbra list`
 **What it does**  
 Shows all tasks in a readable table.
 
@@ -123,9 +147,7 @@ Shows all tasks in a readable table.
 umbra list
 ```
 
----
-
-### `umbra status`
+#### `umbra status`
 **What it does**  
 Shows task counts by lifecycle state.
 
@@ -141,52 +163,143 @@ Shows task counts by lifecycle state.
 umbra status
 ```
 
----
+### Chain Commands
 
-### `umbra logs`
+#### `umbra chain "command sequence"`
+**What it does**  
+Creates a chain task for executing multiple system actions sequentially.
+
+**Supported separators**
+- `then` - sequential execution
+- `and` - sequential execution  
+- `,` - sequential execution
+
+**Natural language parsing**
+The chain engine converts natural language to whitelisted actions:
+- `"open vscode"` → `"open_vscode"`
+- `"open chrome"` → `"open_chrome"`
+- `"open vim"` → `"open_vim"`
+- `"volume up"` → `"volume_up"`
+- `"volume down"` → `"volume_down"`
+- `"lock screen"` → `"lock_screen"`
+
+**Filler words ignored**
+- `please`, `maybe`
+
+**Compound separator**
+- `and then` (takes precedence over individual `and` and `then`)
+
+**Usage examples**
+```bash
+umbra chain "open vscode then open chrome"
+umbra chain "please open vscode and maybe open vim"
+umbra chain "open vscode, open chrome and volume_up"
+umbra chain "open vscode and then open chrome"
+```
+
+#### `umbra chain "command" --dry-run`
+**What it does**  
+Shows execution plan without executing commands.
+
+**Benefits**
+- Validate parsing and action normalization
+- Check which actions are valid
+- Preview execution sequence
+- No system changes
+
+**Usage examples**
+```bash
+umbra chain "open vscode then open chrome" --dry-run
+umbra chain "please open vscode and open vim" --dry-run
+```
+
+**Example output**
+```
+Plan:
+1. open_vscode
+2. open_chrome
+```
+
+### System Commands
+
+#### `umbra daemon status`
+**What it does**  
+Checks if the Umbra daemon is running.
+
+**Output**
+- Shows "Daemon is running (PID: 12345)" if active
+- Shows "Daemon is not running" if stopped
+
+**Usage**
+```bash
+umbra daemon status
+```
+
+#### `umbra daemon start`
+**What it does**  
+Starts the Umbra daemon in the background.
+
+**Behavior**
+- Starts daemon as background process
+- Detaches from terminal
+- Returns success/failure message
+
+**Usage**
+```bash
+umbra daemon start
+```
+
+#### `umbra daemon stop`
+**What it does**  
+Stops a running Umbra daemon gracefully.
+
+**Behavior**
+- Attempts graceful shutdown (SIGTERM)
+- Falls back to force kill (SIGKILL) if needed
+- Returns success/failure message
+
+**Usage**
+```bash
+umbra daemon stop
+```
+
+#### `umbra logs`
 **What it does**  
 Shows latest daemon log lines (newest first, up to 50 lines).
 
+**Log formats**
+- **Traditional**: `timestamp [LEVEL] message`
+- **Structured**: `timestamp [LEVEL] {"json": "data"}`
+
+**Log events**
+- `step_started` - Action execution began
+- `step_done` - Action completed successfully
+- `step_failed` - Action failed with error
+
 **Formatting**
 - `ERROR` entries are highlighted
-- intended for quick diagnostics
+- Intended for quick diagnostics
 
 **Usage**
 ```bash
 umbra logs
 ```
 
----
+### Help Command
 
-### `umbra workflow list`
+#### `umbra help`
 **What it does**  
-Lists available workflow names from:
-- built-in defaults
-- `data/workflows.json`
+Shows grouped command help with usage examples.
 
 **Usage**
 ```bash
-umbra workflow list
+umbra help
 ```
 
----
+### Backward Compatibility
 
-### `umbra workflow <name>`
-**What it does**  
-Schedules a workflow task for daemon execution.
-
-The daemon expands workflow steps and dispatches each step through the system dispatcher and whitelist-based system executor.
-
-**Usage**
-```bash
-umbra workflow morning
-umbra workflow dev_mode
-```
-
----
-
-### Backward-compatible natural language command
-Umbra still supports:
+#### Natural Language Reminder
+Umbra still supports the original natural language format:
 
 ```bash
 umbra "remind me in 10 seconds test"
@@ -194,65 +307,157 @@ umbra "remind me in 10 seconds test"
 
 This maps to a reminder task creation path.
 
-## Features and how to use them
+## 🔒 Security Model
 
-### Reminder feature
-- Create reminder tasks with `umbra add ...`
-- Run daemon continuously
-- Receive Linux notifications at due time
+### Whitelist Enforcement
+- Only predefined actions can execute
+- No arbitrary command execution
+- All actions go through system executor
 
-### Workflow feature
-- Define workflows in `data/workflows.json`
-- List workflows with `umbra workflow list`
-- Schedule one with `umbra workflow <name>`
-- Daemon executes steps through dispatcher + whitelist
+### Available Actions
+- `open_vscode` - Launch VS Code (`code`)
+- `open_chrome` - Launch Google Chrome (`google-chrome`)
+- `open_vim` - Launch Vim (`vim`)
+- `volume_up` - Increase system volume by 5% (`amixer`)
+- `volume_down` - Decrease system volume by 5% (`amixer`)
+- `lock_screen` - Lock current session (`loginctl`)
 
-### Observability feature
-- Use `umbra status` for quick health snapshot
-- Use `umbra list` for detailed task view
-- Use `umbra logs` for daemon activity and errors
+### Pre-Validation
+- Commands checked with `shutil.which()` before execution
+- Clear error messages for missing commands
+- Prevents "No such file or directory" errors
 
-### Safety and reliability feature
-- Atomic storage writes
-- Task status lifecycle prevents duplicate execution
-- Per-task error isolation keeps daemon alive on failures
+### Execution Safety
+- 10-second timeout on all system actions
+- Process isolation prevents hanging
+- Atomic storage writes prevent corruption
 
-## Workflow file format
+## 📋 Chain Execution Examples
 
-`data/workflows.json`:
+### Development Workflow
+```bash
+umbra chain "open vscode then open chrome"
+```
+This launches VS Code and Chrome sequentially.
 
+### Session Management
+```bash
+umbra chain "volume_down and lock_screen"
+```
+This lowers volume and locks the screen.
+
+### Multiple Applications
+```bash
+umbra chain "open vscode, open chrome, volume_up"
+```
+This launches both apps and increases volume.
+
+### Dry Run Planning
+```bash
+umbra chain "open vscode then open chrome" --dry-run
+```
+Shows execution plan without running commands.
+
+## 🔧 Troubleshooting
+
+### Common Issues
+
+#### `umbra` command not found
+```bash
+pip install -e .
+```
+
+#### Task created but nothing happens
+```bash
+python3 daemon.py  # Ensure daemon is running
+umbra logs          # Check for errors
+```
+
+#### Notification not shown
+```bash
+sudo apt install libnotify-bin  # Install notification support
+```
+
+#### Chain step fails
+```bash
+umbra show <task_id>  # Check step status and errors
+umbra logs             # Review structured logs
+```
+
+#### Daemon won't start
+```bash
+pkill -f "python.*daemon.py"  # Kill existing daemon
+python3 daemon.py           # Start fresh
+```
+
+## 🖥️ Linux Requirements
+
+### Required Dependencies
+```bash
+sudo apt install libnotify-bin  # Desktop notifications
+```
+
+### Optional for Actions
+- `google-chrome` - Web browser
+- `code` - VS Code CLI
+- `amixer`/PulseAudio - Volume control
+
+## 🏗️ Development Notes
+
+### Chain Engine Architecture
+The chain system replaces static workflows with dynamic natural language parsing:
+
+1. **Parsing**: Natural language → action list using separators
+2. **Normalization**: Text → whitelisted action names
+3. **Execution**: Sequential dispatch through system executor
+4. **Error handling**: Per-step isolation with detailed reporting
+
+### Security Model
+- Only whitelisted actions can execute
+- No arbitrary command execution
+- All actions go through same system executor
+- Chain failures are contained and reported
+
+### Storage Safety
+- Atomic file operations prevent corruption
+- Task status lifecycle prevents duplicates
+- Step-by-step persistence survives crashes
+- JSON schema validation ensures consistency
+
+## 📊 Monitoring and Observability
+
+### Task Lifecycle
+1. `pending` - Scheduled, waiting for execution
+2. `running` - Currently executing
+3. `done` - Completed successfully
+4. `failed` - Failed with error details
+
+### Structured Logging Format
 ```json
 {
-  "morning": ["open_vscode", "open_chrome", "volume_up"],
-  "dev_mode": ["open_vscode", "open_chrome"]
+  "timestamp": "2026-04-07T05:04:28",
+  "task_id": "abc12345",
+  "event": "step_started | step_done | step_failed",
+  "action": "open_vscode",
+  "error": null | "error message"
 }
 ```
 
-Each entry is declarative: workflow name -> list of action names.
-
-## Linux requirements
-
-Install desktop notification dependency:
-
+### Log Analysis
 ```bash
-sudo apt install libnotify-bin
+# View recent logs
+umbra logs
+
+# Watch logs in real-time
+tail -f logs/umbra.log
+
+# Filter for errors
+grep "ERROR" logs/umbra.log
+
+# Filter for specific task
+grep "abc12345" logs/umbra.log
 ```
 
-Optional for some system actions:
-- `google-chrome`
-- `code` (VS Code CLI)
-- `amixer`/PulseAudio-compatible volume tools
+---
 
-## Troubleshooting
-
-- **`umbra` command not found**
-  - run `pip install -e .` again in project root
-
-- **Task created but nothing happens**
-  - ensure `python3 daemon.py` is running
-  - check `umbra logs`
-
-- **Notification not shown**
-  - install `libnotify-bin`
-  - verify desktop session supports notifications
-
+**Umbra v2** is now production-ready with comprehensive observability, reliability, and safety features for local automation tasks.

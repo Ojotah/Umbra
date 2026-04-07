@@ -4,7 +4,7 @@ System command execution (future).
 Planned capabilities:
 - allow safe execution of whitelisted system commands
 - capture output, return codes, and errors
-- support chaining via workflows
+- support chaining via chain commands
 
 This file is a stub in V1.
 """

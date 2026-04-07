@@ -22,7 +22,6 @@ class Settings:
     logs_dir: Path = Path(__file__).resolve().parent.parent / "logs"
     log_file: Path = Path(__file__).resolve().parent.parent / "logs" / "umbra.log"
     data_dir: Path = Path(__file__).resolve().parent.parent / "data"
-    workflows_file: Path = Path(__file__).resolve().parent.parent / "data" / "workflows.json"
     poll_interval_seconds: float = 1.0
 
 

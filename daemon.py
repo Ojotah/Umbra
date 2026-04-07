@@ -15,6 +15,7 @@ from __future__ import annotations
 import signal
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Iterable
 
 from config.settings import SETTINGS
@@ -74,7 +75,7 @@ class UmbraDaemon:
                 return
             self._log.info(f"Executing task {task_id} ({task.get('type')})")
 
-            execute_task(task)
+            execute_task(task, SETTINGS.tasks_file)
 
             update_task_status(SETTINGS.tasks_file, task_id, "done")
             self._log.info(f"Task done {task_id}")
@@ -105,9 +106,9 @@ def get_due_tasks(tasks: Iterable[Task], *, now: float) -> Iterable[Task]:
             continue
 
 
-def execute_task(task: Task) -> None:
+def execute_task(task: Task, task_file: Path) -> None:
     """Execute a single task (may raise)."""
-    result = dispatch_task(task)
+    result = dispatch_task(task, task_file)
     if not bool(result.get("success")):
         raise RuntimeError(str(result.get("error", "Task dispatch failed")))
 
