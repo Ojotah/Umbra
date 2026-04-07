@@ -14,6 +14,7 @@ The Core API exposes exactly these methods:
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import signal
@@ -29,7 +30,7 @@ from commands.remind import ReminderRequest, build_reminder_task
 from config.settings import SETTINGS
 from core.chains.chain_engine import parse_chain
 from services.dispatcher import dispatch_task
-from services.logger import Logger
+from services.logger import log
 from storage.task_store import (
     StorageError,
     Task,
@@ -51,7 +52,9 @@ class UmbraAPI:
     """Core API for Umbra task automation."""
 
     def __init__(self) -> None:
-        self._log = Logger(SETTINGS.log_file, level="INFO")
+        # Initialize logger
+        from services.logger import init_logger
+        init_logger(SETTINGS.log_file, "INFO")
 
     # Task management methods
 
@@ -86,8 +89,10 @@ class UmbraAPI:
         
         try:
             add_task(SETTINGS.tasks_file, task)
+            log("task_created", task_id=task["id"], msg=f"Created {type} task")
             return task
         except StorageError as e:
+            log("task_error", error=str(e), msg=f"Failed to add task: {e}")
             raise RuntimeError(f"Failed to add task: {e}") from e
 
     def list_tasks(self, status: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -168,9 +173,10 @@ class UmbraAPI:
         
         # Mark as running first to prevent duplicates
         if not update_task_status(SETTINGS.tasks_file, task_id, "running"):
+            log("task_skipped", task_id=task_id, msg=f"Task {task_id} already running")
             return
         
-        self._log.info(f"Executing task {task_id} ({task.get('type')})")
+        log("task_started", task_id=task_id, msg=f"Executing task {task_id} ({task.get('type')})")
         
         try:
             result = dispatch_task(task, SETTINGS.tasks_file)
@@ -178,14 +184,14 @@ class UmbraAPI:
                 raise RuntimeError(str(result.get("error", "Task dispatch failed")))
             
             update_task_status(SETTINGS.tasks_file, task_id, "done")
-            self._log.info(f"Task done {task_id}")
+            log("task_completed", task_id=task_id, msg=f"Task {task_id} completed successfully")
             
         except Exception as e:
             try:
                 update_task_status(SETTINGS.tasks_file, task_id, "failed", error=str(e))
+                log("task_failed", task_id=task_id, error=str(e), msg=f"Task {task_id} failed: {e}")
             except Exception:
-                pass
-            self._log.error(f"Task failed {task_id}: {e}")
+                log("task_error", task_id=task_id, error=str(e), msg=f"Task {task_id} failed to update status")
             raise
 
     # Daemon control methods
@@ -241,26 +247,29 @@ class UmbraAPI:
             lines = SETTINGS.log_file.read_text(encoding="utf-8").splitlines()
             recent_lines = list(reversed(lines[-n:]))
             
-            # Parse log lines into structured format
+            # Parse JSON log lines into structured format
             logs = []
             for line in recent_lines:
-                # Simple parsing - assumes format: "timestamp - level - message"
-                parts = line.split(" - ", 2)
-                if len(parts) >= 3:
+                line = line.strip()
+                if not line:
+                    continue
+                    
+                try:
+                    # Parse JSON log entry
+                    log_entry = json.loads(line)
+                    logs.append(log_entry)
+                except json.JSONDecodeError:
+                    # Fallback for non-JSON lines
                     logs.append({
-                        "timestamp": parts[0],
-                        "level": parts[1],
-                        "message": parts[2].strip(),
-                    })
-                else:
-                    logs.append({
-                        "timestamp": "",
+                        "ts": "",
                         "level": "INFO",
-                        "message": line.strip(),
+                        "event": "legacy_log",
+                        "msg": line,
                     })
             
             return logs
         except OSError as e:
+            log("log_error", error=str(e), msg=f"Failed to read logs: {e}")
             raise RuntimeError(f"Failed to read logs: {e}") from e
 
     # Convenience methods for common operations

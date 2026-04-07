@@ -74,7 +74,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p_service_sub = p_service.add_subparsers(dest="service_action")
     p_service_sub.add_parser("install", help="Install systemd user service.")
     p_service_sub.add_parser("uninstall", help="Uninstall systemd user service.")
-    p_service_sub.add_parser("status", help="Check systemd service status.")
     
     # Daemon control commands
     p_daemon = sub.add_parser("daemon", help="Daemon control commands.")
@@ -279,32 +278,18 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     if args.command == "service":
-        from system.service import install_service, uninstall_service, get_service_status
+        from system.service import install_service, uninstall_service
         service_action = getattr(args, 'service_action', '')
         
         if service_action == "install":
-            result = install_service()
-            print(result)
+            install_service()
             return 0
         
         if service_action == "uninstall":
-            result = uninstall_service()
-            print(result)
+            uninstall_service()
             return 0
         
-        if service_action == "status":
-            status = get_service_status()
-            if status == "active":
-                print("Systemd service is active")
-            elif status == "inactive":
-                print("Systemd service is inactive")
-            elif status == "failed":
-                print("Systemd service has failed")
-            else:
-                print("Systemd service status unknown")
-            return 0
-        
-        print("Usage: umbra service {install|uninstall|status}", file=sys.stderr)
+        print("Usage: umbra service {install|uninstall}", file=sys.stderr)
         return 2
 
     # Backward-compatible natural language path

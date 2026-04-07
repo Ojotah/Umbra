@@ -32,7 +32,7 @@ except ImportError:
     ThreadPoolExecutor = None
 
 from config.settings import SETTINGS
-from services.logger import Logger
+from services.logger import log
 from storage.task_store import StorageError, get_pending_tasks, update_task_status
 from umbra.api import api
 
@@ -54,11 +54,14 @@ class DaemonConfig:
 class UmbraDaemon:
     """Runs APScheduler and executes tasks when scheduled."""
 
-    def __init__(self, *, config: DaemonConfig | None = None, logger: Logger | None = None) -> None:
+    def __init__(self, *, config: DaemonConfig | None = None, logger: Any | None = None) -> None:
         self._config = config or DaemonConfig()
-        self._log = logger or Logger(SETTINGS.log_file, level="INFO")
         self._stop = False
         self._scheduler: BackgroundScheduler | None = None
+        
+        # Initialize structured logger
+        from services.logger import init_logger
+        init_logger(SETTINGS.log_file, "INFO")
 
     def run_forever(self) -> None:
         """Start the daemon with APScheduler or fallback polling (blocking)."""
@@ -70,16 +73,16 @@ class UmbraDaemon:
         PID_PATH.write_text(str(os.getpid()))
 
         try:
-            self._log.info("Umbra daemon started")
+            log("daemon_started", msg="Umbra daemon started")
 
             if APSCHEDULER_AVAILABLE:
                 self._run_with_scheduler()
             else:
-                self._log.info("APScheduler not available, falling back to polling")
+                log("daemon_fallback", msg="APScheduler not available, falling back to polling")
                 self._run_with_polling()
 
         except Exception as e:
-            self._log.error(f"Daemon error: {e}")
+            log("daemon_error", error=str(e), msg=f"Daemon error: {e}")
         finally:
             self._shutdown()
 
@@ -175,7 +178,7 @@ class UmbraDaemon:
             # Call API execute_task method
             api.execute_task(task_id)
         except Exception as e:  # noqa: BLE001 - per-task safety
-            self._log.error(f"Task failed {task_id}: {e}")
+            log("task_error", task_id=task_id, error=str(e), msg=f"Task failed {task_id}: {e}")
 
     def _handle_stop_signal(self, *_: object) -> None:
         """Handle shutdown signals."""
@@ -186,9 +189,9 @@ class UmbraDaemon:
         if self._scheduler:
             try:
                 self._scheduler.shutdown(wait=True)
-                self._log.info("APScheduler shutdown")
+                log("daemon_stopped", msg="APScheduler shutdown")
             except Exception as e:
-                self._log.error(f"Error shutting down scheduler: {e}")
+                log("daemon_error", error=str(e), msg=f"Error shutting down scheduler: {e}")
 
         # Remove PID file
         try:
@@ -196,7 +199,7 @@ class UmbraDaemon:
         except Exception:
             pass
 
-        self._log.info("Umbra daemon stopped")
+        log("daemon_stopped", msg="Umbra daemon stopped")
 
 
 def main() -> None:
